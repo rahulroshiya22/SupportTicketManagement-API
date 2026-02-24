@@ -1,20 +1,14 @@
 -- ============================================================
 --  Support Ticket Management System — SQL Server Script
 --  Database: SupportTicketManagementDB
---  Generated: 2026-02-24
---  Run in SSMS or Azure Data Studio on your SQL Server
--- ============================================================
+- ============================================================
 
-USE master;
-GO
 
--- Create database if not exists
-IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'SupportTicketManagementDB')
-BEGIN
-    CREATE DATABASE SupportTicketManagementDB;
-    PRINT 'Database SupportTicketManagementDB created.';
-END
-GO
+
+-- Create database 
+
+CREATE DATABASE SupportTicketManagementDB;
+   
 
 USE SupportTicketManagementDB;
 GO
@@ -189,27 +183,3 @@ PRINT 'For correct login, run the .NET API with dotnet run — it seeds real BCr
 PRINT 'Or use this script only for schema creation and let the API seed the data.';
 GO
 
--- ============================================================
---  USEFUL QUERIES
--- ============================================================
-
--- View all tickets with creator and assignee
--- SELECT t.Id, t.Title, t.Status, t.Priority,
---        uc.Name AS CreatedBy, ua.Name AS AssignedTo, t.CreatedAt
--- FROM Tickets t
--- JOIN Users uc ON t.CreatedById = uc.Id
--- LEFT JOIN Users ua ON t.AssignedToId = ua.Id
--- ORDER BY t.CreatedAt DESC;
-
--- View ticket audit log
--- SELECT tsl.Id, t.Title, tsl.OldStatus, tsl.NewStatus, u.Name AS ChangedBy, tsl.ChangedAt
--- FROM TicketStatusLogs tsl
--- JOIN Tickets t ON tsl.TicketId = t.Id
--- JOIN Users u ON tsl.ChangedById = u.Id
--- ORDER BY tsl.ChangedAt DESC;
-
--- Count tickets by status
--- SELECT Status, COUNT(*) AS Total FROM Tickets GROUP BY Status;
-
--- Count tickets by priority
--- SELECT Priority, COUNT(*) AS Total FROM Tickets GROUP BY Priority;
