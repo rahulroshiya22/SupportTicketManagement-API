@@ -1,0 +1,50 @@
+## .NET Build Output
+bin/
+obj/
+
+## User secrets & config overrides
+appsettings.Development.json
+**/appsettings.local.json
+**/appsettings.*.local.json
+
+## Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!**/packages/repositories.config
+
+## Publish output
+publish/
+out/
+
+## Logs
+*.log
+logs/
+
+## OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Rider & JetBrains
+.idea/
+*.sln.iml
+
+## Entity Framework Migrations (keep Migrations folder, ignore snapshots only if needed)
+# Uncomment below if you don't want to commit migrations:
+# **/Migrations/
+
+## Env / secrets — never commit these
+.env
+*.pem
+*.key
+secrets.json
