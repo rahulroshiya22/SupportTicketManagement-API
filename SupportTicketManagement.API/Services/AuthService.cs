@@ -6,12 +6,7 @@ using SupportTicketManagement.API.Helpers;
 
 namespace SupportTicketManagement.API.Services
 {
-    public interface IAuthService
-    {
-        Task<AuthResponseDTO?> LoginAsync(string email, string password);
-    }
-
-    public class AuthService : IAuthService
+    public class AuthService
     {
         private readonly AppDbContext _db;
         private readonly JwtHelper _jwt;

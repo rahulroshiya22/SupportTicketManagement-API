@@ -2,27 +2,21 @@ using Microsoft.EntityFrameworkCore;
 using SupportTicketManagement.API.Data;
 using SupportTicketManagement.API.DTOs.Tickets;
 using SupportTicketManagement.API.DTOs.Users;
-using SupportTicketManagement.API.Entities;
+using SupportTicketManagement.API.Models;
 using SupportTicketManagement.API.Enums;
 
 namespace SupportTicketManagement.API.Services
 {
-    public interface ITicketService
-    {
-        Task<TicketResponseDTO> CreateTicketAsync(CreateTicketDTO dto, int currentUserId);
-        Task<List<TicketResponseDTO>> GetTicketsAsync(int currentUserId, RoleName role);
-        Task<TicketResponseDTO> AssignTicketAsync(int ticketId, int targetUserId, int currentUserId);
-        Task<TicketResponseDTO> UpdateStatusAsync(int ticketId, TicketStatus newStatus, int currentUserId);
-        Task DeleteTicketAsync(int ticketId);
-    }
-
-    public class TicketService : ITicketService
+    public class TicketService
     {
         private readonly AppDbContext _db;
 
-        public TicketService(AppDbContext db) => _db = db;
+        public TicketService(AppDbContext db)
+        {
+            _db = db;
+        }
 
-        public async Task<TicketResponseDTO> CreateTicketAsync(CreateTicketDTO dto, int currentUserId)
+        public async Task<TicketResponseDTO> CreateTicketAsync(CreateTicketDTO dto, int userId)
         {
             var ticket = new Ticket
             {
@@ -30,114 +24,145 @@ namespace SupportTicketManagement.API.Services
                 Description = dto.Description,
                 Priority = dto.Priority,
                 Status = TicketStatus.OPEN,
-                CreatedById = currentUserId,
-                CreatedAt = DateTime.UtcNow
+                CreatedById = userId
             };
 
             _db.Tickets.Add(ticket);
             await _db.SaveChangesAsync();
 
-            return await GetTicketResponseAsync(ticket.Id);
+            return await GetTicketDTO(ticket.Id);
         }
 
-        public async Task<List<TicketResponseDTO>> GetTicketsAsync(int currentUserId, RoleName role)
+        public async Task<PagedResultDTO<TicketResponseDTO>> GetTicketsAsync(int userId, RoleName role, TicketFilterDTO filter)
         {
-            IQueryable<Ticket> query = _db.Tickets
+            var query = _db.Tickets
                 .Include(t => t.CreatedBy).ThenInclude(u => u.Role)
-                .Include(t => t.AssignedTo!).ThenInclude(u => u.Role);
+                .Include(t => t.AssignedTo!).ThenInclude(u => u.Role)
+                .AsQueryable();
 
             if (role == RoleName.SUPPORT)
-                query = query.Where(t => t.AssignedToId == currentUserId);
+                query = query.Where(t => t.AssignedToId == userId);
             else if (role == RoleName.USER)
-                query = query.Where(t => t.CreatedById == currentUserId);
+                query = query.Where(t => t.CreatedById == userId);
 
-            return await query.Select(t => MapToDTO(t)).ToListAsync();
+            if (!string.IsNullOrEmpty(filter.Status))
+                query = query.Where(t => t.Status == Enum.Parse<TicketStatus>(filter.Status, true));
+
+            if (!string.IsNullOrEmpty(filter.Priority))
+                query = query.Where(t => t.Priority == Enum.Parse<TicketPriority>(filter.Priority, true));
+
+            if (!string.IsNullOrEmpty(filter.Search))
+                query = query.Where(t => t.Title.Contains(filter.Search) || t.Description.Contains(filter.Search));
+
+            var total = await query.CountAsync();
+            var page = filter.Page < 1 ? 1 : filter.Page;
+            var pageSize = filter.PageSize < 1 ? 10 : filter.PageSize;
+
+            var data = await query
+                .OrderByDescending(t => t.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(t => MapToDTO(t))
+                .ToListAsync();
+
+            return new PagedResultDTO<TicketResponseDTO>
+            {
+                Data = data,
+                Total = total,
+                Page = page,
+                PageSize = pageSize,
+                TotalPages = (int)Math.Ceiling((double)total / pageSize)
+            };
         }
 
-        public async Task<TicketResponseDTO> AssignTicketAsync(int ticketId, int targetUserId, int currentUserId)
+        public async Task<TicketResponseDTO> AssignTicketAsync(int ticketId, int targetUserId)
         {
-            var ticket = await _db.Tickets.FindAsync(ticketId)
-                ?? throw new KeyNotFoundException("Ticket not found.");
+            var ticket = await _db.Tickets.FindAsync(ticketId);
+            if (ticket == null)
+                throw new Exception("Ticket not found.");
 
-            var targetUser = await _db.Users.Include(u => u.Role)
-                .FirstOrDefaultAsync(u => u.Id == targetUserId)
-                ?? throw new KeyNotFoundException("User not found.");
+            var targetUser = await _db.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == targetUserId);
+            if (targetUser == null)
+                throw new Exception("User not found.");
 
             if (targetUser.Role.Name == RoleName.USER)
-                throw new InvalidOperationException("Cannot assign ticket to a USER role. Only MANAGER or SUPPORT allowed.");
+                throw new Exception("Cannot assign ticket to a USER role.");
 
             ticket.AssignedToId = targetUserId;
             await _db.SaveChangesAsync();
 
-            return await GetTicketResponseAsync(ticketId);
+            return await GetTicketDTO(ticketId);
         }
 
-        public async Task<TicketResponseDTO> UpdateStatusAsync(int ticketId, TicketStatus newStatus, int currentUserId)
+        public async Task<TicketResponseDTO> UpdateStatusAsync(int ticketId, TicketStatus newStatus, int userId)
         {
-            var ticket = await _db.Tickets.FindAsync(ticketId)
-                ?? throw new KeyNotFoundException("Ticket not found.");
+            var ticket = await _db.Tickets.FindAsync(ticketId);
+            if (ticket == null)
+                throw new Exception("Ticket not found.");
 
-            // Validate forward-only transition
             if ((int)newStatus != (int)ticket.Status + 1)
-                throw new InvalidOperationException(
-                    $"Invalid status transition: {ticket.Status} → {newStatus}. " +
-                    $"Only forward steps allowed: OPEN→IN_PROGRESS→RESOLVED→CLOSED.");
+                throw new Exception($"Invalid status transition: {ticket.Status} -> {newStatus}");
 
-            // Create audit log BEFORE changing status
             var log = new TicketStatusLog
             {
                 TicketId = ticket.Id,
                 OldStatus = ticket.Status,
                 NewStatus = newStatus,
-                ChangedById = currentUserId,
-                ChangedAt = DateTime.UtcNow
+                ChangedById = userId
             };
 
             ticket.Status = newStatus;
             _db.TicketStatusLogs.Add(log);
             await _db.SaveChangesAsync();
 
-            return await GetTicketResponseAsync(ticketId);
+            return await GetTicketDTO(ticketId);
         }
 
         public async Task DeleteTicketAsync(int ticketId)
         {
-            var ticket = await _db.Tickets.FindAsync(ticketId)
-                ?? throw new KeyNotFoundException("Ticket not found.");
+            var ticket = await _db.Tickets.FindAsync(ticketId);
+            if (ticket == null)
+                throw new Exception("Ticket not found.");
 
             _db.Tickets.Remove(ticket);
             await _db.SaveChangesAsync();
         }
 
-        // ── Helpers ─────────────────────────────────────────────────────────────
-        private async Task<TicketResponseDTO> GetTicketResponseAsync(int ticketId)
+        private async Task<TicketResponseDTO> GetTicketDTO(int ticketId)
         {
             var t = await _db.Tickets
                 .Include(t => t.CreatedBy).ThenInclude(u => u.Role)
                 .Include(t => t.AssignedTo!).ThenInclude(u => u.Role)
-                .FirstOrDefaultAsync(t => t.Id == ticketId)
-                ?? throw new KeyNotFoundException("Ticket not found.");
+                .FirstAsync(t => t.Id == ticketId);
 
             return MapToDTO(t);
         }
 
-        private static UserResponseDTO MapUser(User u) => new()
+        private static UserResponseDTO MapUser(User u)
         {
-            Id = u.Id, Name = u.Name, Email = u.Email,
-            Role = new RoleInfoDTO { Id = u.Role.Id, Name = u.Role.Name.ToString() },
-            CreatedAt = u.CreatedAt
-        };
+            return new UserResponseDTO
+            {
+                Id = u.Id,
+                Name = u.Name,
+                Email = u.Email,
+                Role = new RoleInfoDTO { Id = u.Role.Id, Name = u.Role.Name.ToString() },
+                CreatedAt = u.CreatedAt
+            };
+        }
 
-        private static TicketResponseDTO MapToDTO(Ticket t) => new()
+        private static TicketResponseDTO MapToDTO(Ticket t)
         {
-            Id = t.Id,
-            Title = t.Title,
-            Description = t.Description,
-            Status = t.Status.ToString(),
-            Priority = t.Priority.ToString(),
-            CreatedBy = MapUser(t.CreatedBy),
-            AssignedTo = t.AssignedTo == null ? null : MapUser(t.AssignedTo),
-            CreatedAt = t.CreatedAt
-        };
+            return new TicketResponseDTO
+            {
+                Id = t.Id,
+                Title = t.Title,
+                Description = t.Description,
+                Status = t.Status.ToString(),
+                Priority = t.Priority.ToString(),
+                CreatedBy = MapUser(t.CreatedBy),
+                AssignedTo = t.AssignedTo == null ? null : MapUser(t.AssignedTo),
+                CreatedAt = t.CreatedAt
+            };
+        }
     }
 }

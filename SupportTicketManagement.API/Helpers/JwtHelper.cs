@@ -2,7 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
-using SupportTicketManagement.API.Entities;
+using SupportTicketManagement.API.Models;
 
 namespace SupportTicketManagement.API.Helpers
 {

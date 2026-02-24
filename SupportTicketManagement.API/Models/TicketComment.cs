@@ -1,6 +1,6 @@
 using SupportTicketManagement.API.Enums;
 
-namespace SupportTicketManagement.API.Entities
+namespace SupportTicketManagement.API.Models
 {
     public class TicketStatusLog
     {
@@ -11,7 +11,6 @@ namespace SupportTicketManagement.API.Entities
         public int ChangedById { get; set; }
         public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
 
-        // Navigation
         public Ticket Ticket { get; set; } = null!;
         public User ChangedBy { get; set; } = null!;
     }

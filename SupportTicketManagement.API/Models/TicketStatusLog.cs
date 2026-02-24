@@ -1,4 +1,4 @@
-namespace SupportTicketManagement.API.Entities
+namespace SupportTicketManagement.API.Models
 {
     public class TicketComment
     {
@@ -8,7 +8,6 @@ namespace SupportTicketManagement.API.Entities
         public string Comment { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        // Navigation
         public Ticket Ticket { get; set; } = null!;
         public User User { get; set; } = null!;
     }

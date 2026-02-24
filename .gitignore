@@ -2,6 +2,10 @@
 bin/
 obj/
 
+## Not needed on GitHub
+TMSDoc/
+scripts/
+
 ## User secrets & config overrides
 appsettings.Development.json
 **/appsettings.local.json
